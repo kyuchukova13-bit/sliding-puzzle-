@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Логически Пъзел</title>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 15px;
+            box-sizing: border-box;
+        }
+
+        /* --- Контроли и Статистика --- */
+        .header-ui {
+            background-color: #34495e;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 480px;
+            text-align: center;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #bdc3c7;
+        }
+
+        .stat-val { color: #f1c40f; font-weight: bold; }
+
+        h1 { margin: 0 0 10px 0; font-size: 1.4rem; }
+
+        select, button {
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button {
+            background: linear-gradient(135deg, #FF9F43, #FF7F00);
+            color: white;
+            font-weight: bold;
+        }
+
+        /* --- Контейнер на играта --- */
+        #puzzle-container {
+            display: grid;
+            gap: 1.2vmin;
+            background-color: #34495e;
+            padding: 1.5vmin;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 82vmin; 
+            height: 82vmin; 
+            max-width: 460px; 
+            max-height: 460px;
+        }
+
+        .tile {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7vmin;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            user-select: none;
+            box-shadow: inset 0 -3px 5px rgba(0,0,0,0.2), inset 0 3px 5px rgba(255,255,255,0.5);
+            transition: transform 0.1s;
+        }
+
+        @media (min-width: 600px) { .tile { font-size: 40px; } }
+
+        .tile:not(.empty):active { transform: scale(0.95); }
+
+        .tile.empty {
+            background-color: #2c3e50;
+            box-shadow: inset 0 6px 10px rgba(0,0,0,0.4);
+        }
+
+        /* Цветови схеми */
+        .grid-3 .tile:not(.empty) { background-color: #FF9F43; color: #333; }
+        .grid-4 .tile:not(.empty) { background-color: #3498db; color: #fff; }
+        .grid-5 .tile:not(.empty) { background-color: #4cd137; color: #fff; }
+
+        /* --- Финален Екран (Overlay) --- */
+        #win-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(44, 62, 80, 0.95);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            text-align: center;
+        }
+
+        #win-screen h2 { font-size: 3rem; color: #f1c40f; margin-bottom: 10px; }
+        #win-screen p { font-size: 1.2rem; margin: 5px 0; }
+
+        /* --- Авторски подпис --- */
+        #author {
+            position: fixed;
+            bottom: 10px;
+            right: 15px;
+            font-size: 0.75rem;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-ui">
+        <h1>Пъзел</h1>
+        <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
+            <select id="grid-size" onchange="initGame()">
+                <option value="3">Ниво: 3x3</option>
+                <option value="4">Ниво: 4x4</option>
+                <option value="5">Ниво: 5x5</option>
+            </select>
+            <button onclick="initGame()">Нова игра</button>
+        </div>
+        <div class="stats-bar">
+            <span>Ходове: <span id="move-count" class="stat-val">0</span></span>
+            <span>Най-добро: <span id="best-score" class="stat-val">-</span></span>
+        </div>
+    </div>
+
+    <div id="puzzle-container"></div>
+
+    <div id="win-screen">
+        <h2>ПОБЕДА!</h2>
+        <p id="final-moves"></p>
+        <p id="record-msg" style="color: #4cd137; font-weight: bold;"></p>
+        <br>
+        <button onclick="closeWinScreen()" style="padding: 15px 30px; font-size: 1.2rem;">ИГРАЙ ПАК</button>
+    </div>
+
+    <div id="author">Дизайн: Дочка Кючукова</div>
+
+    <script>
+        let size = 3;
+        let board = [];
+        let moves = 0;
+        const container = document.getElementById('puzzle-container');
+
+        function initGame() {
+            size = parseInt(document.getElementById('grid-size').value);
+            moves = 0;
+            updateStats();
+            document.getElementById('win-screen').style.display = 'none';
+            container.className = `grid-${size}`; 
+
+            board = Array.from({ length: size * size }, (_, i) => (i + 1) % (size * size));
+            do { shuffle(board); } while (!isSolvable(board, size));
+
+            renderBoard();
+            displayBestScore();
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function isSolvable(boardArray, s) {
+            let inversions = 0;
+            const flat = boardArray.filter(v => v !== 0);
+            for (let i = 0; i < flat.length; i++) {
+                for (let j = i + 1; j < flat.length; j++) {
+                    if (flat[i] > flat[j]) inversions++;
+                }
+            }
+            if (s % 2 === 1) return inversions % 2 === 0;
+            let emptyRow = Math.floor(boardArray.indexOf(0) / s);
+            return (inversions + (s - emptyRow)) % 2 === 0;
+        }
+
+        function renderBoard() {
+            container.innerHTML = '';
+            container.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+            board.forEach((value, index) => {
+                const tile = document.createElement('div');
+                tile.classList.add('tile');
+                if (value === 0) tile.classList.add('empty');
+                else {
+                    tile.textContent = value;
+                    tile.addEventListener('pointerdown', () => moveTile(index));
+                }
+                container.appendChild(tile);
+            });
+        }
+
+        function moveTile(index) {
+            const emptyIdx = board.indexOf(0);
+            const r = Math.floor(index / size), c = index % size;
+            const er = Math.floor(emptyIdx / size), ec = emptyIdx % size;
+
+            if (Math.abs(r - er) + Math.abs(c - ec) === 1) {
+                [board[index], board[emptyIdx]] = [board[emptyIdx], board[index]];
+                moves++;
+                updateStats();
+                renderBoard();
+                if (checkWin()) handleWin();
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('move-count').textContent = moves;
+        }
+
+        function displayBestScore() {
+            const best = localStorage.getItem('best_' + size);
+            document.getElementById('best-score').textContent = best ? best : '-';
+        }
+
+        function checkWin() {
+            const winState = Array.from({ length: size * size }, (_, i) => (i + 1) % (size * size));
+            return board.every((val, i) => val === winState[i]);
+        }
+
+        function handleWin() {
+            const best = localStorage.getItem('best_' + size);
+            let isNewRecord = false;
+            if (!best || moves < parseInt(best)) {
+                localStorage.setItem('best_' + size, moves);
+                isNewRecord = true;
+            }
+
+            document.getElementById('final-moves').textContent = `Завърши пъзела с ${moves} хода!`;
+            document.getElementById('record-msg').textContent = isNewRecord ? "НОВ ЛИЧЕН РЕКОРД! 🏆" : "";
+            document.getElementById('win-screen').style.display = 'flex';
+        }
+
+        function closeWinScreen() {
+            initGame();
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
